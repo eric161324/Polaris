@@ -75,3 +75,9 @@ docs-dev/
 *.log
 tmp/
 **/tmp/
+
+# Codex account state must stay outside source and build contexts.
+.codex/
+**/.codex/
+auth.json
+**/auth.json

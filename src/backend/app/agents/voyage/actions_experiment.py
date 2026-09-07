@@ -683,6 +683,11 @@ async def _eval_model_config_file(ctx: ActionContext) -> dict[str, str]:
     if not eval_model:
         return {}
     _provider, route = await ctx.llm.resolve("default")
+    if route.provider_kind == "codex_cli":
+        raise ValueError(
+            "CODEX_EVAL_API_UNSUPPORTED: Codex 订阅不能导出模型 API 凭据。"
+            "请清空实验的 eval_model；直接调用模型 API 的实验需要独立 API 提供商。"
+        )
     config = {
         "base_url": route.base_url or "",
         "api_key": route.api_key,

@@ -5,6 +5,8 @@ data directory convention, restricted-network build arguments, migrations, ports
 local development, see [Development](development.md); for the variables referenced here, see
 [Configuration](configuration.md).
 
+For personal Codex subscription deployments, use the [Codex overlay guide](zh/codex-deployment.md).
+
 ## Compose files
 
 Polaris ships three compose files in `docker/`:

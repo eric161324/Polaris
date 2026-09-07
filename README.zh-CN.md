@@ -194,6 +194,9 @@ make desktop-dist           # 为当前平台打一个未签名的安装包
 
 ## 快速开始
 
+只有 Codex 订阅、没有 LLM API Key？可使用 [Codex 订阅个人部署](docs/zh/codex-deployment.md)，嵌入和重排仍可使用独立 API。
+
+
 > [!TIP]
 > 无论开发还是生产，都推荐用 Docker Compose 跑 Polaris。它只需要装 Docker 和 Docker Compose,
 > 本地不需要 Python、Node 或数据库。生产部署见

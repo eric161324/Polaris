@@ -590,7 +590,7 @@ export interface GateRead {
 // Admin · LLM
 // ============================================================
 
-export type LlmProviderKind = 'openai_compat' | 'anthropic' | 'fake';
+export type LlmProviderKind = 'openai_compat' | 'anthropic' | 'codex_cli' | 'fake';
 
 /** 与后端 `app/core/llm/router.py` 的 STAGES 保持一致（大白话名字见 lib/stageLabels.ts）。
  *
@@ -4688,6 +4688,9 @@ export const api = {
   },
 
   // —— Admin · LLM ——
+  getCodexStatus(): Promise<{ ok: boolean; error: string | null }> {
+    return request('/admin/llm/codex/status');
+  },
   listLlmProviders(): Promise<LlmProviderRead[]> {
     return request<LlmProviderRead[]>('/admin/llm/providers');
   },

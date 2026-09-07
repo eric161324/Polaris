@@ -59,3 +59,9 @@ src/desktop/resources/
 # vendored packages: declaration output is built by `pnpm run vendor:types`
 vendor/deepseek-cordis/*/lib/
 vendor/deepseek-cordis/*/tsconfig.tsbuildinfo
+
+# Codex account state must stay outside source and build contexts.
+.codex/
+**/.codex/
+auth.json
+**/auth.json

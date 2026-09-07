@@ -212,6 +212,9 @@ See [docs/desktop.md](docs/desktop.md) for the process model, the IPC contract, 
 
 ## Quick start
 
+For a personal instance using a Codex subscription instead of an LLM API key, see [Codex deployment (中文)](docs/zh/codex-deployment.md). Embeddings and reranking keep their own API providers.
+
+
 > [!TIP]
 > Docker Compose is the recommended way to run Polaris, in development and in production. It needs only
 > Docker and Docker Compose installed, with no local Python, Node, or database. See

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.llm.base import EffortLevel
 
-ProviderKind = Literal["openai_compat", "anthropic", "fake"]
+ProviderKind = Literal["openai_compat", "anthropic", "codex_cli", "fake"]
 UserAgent = Annotated[str, Field(max_length=255, pattern=r"^[^\r\n]*$")]
 
 
@@ -69,6 +69,11 @@ class TestModelRequest(BaseModel):
 class TestModelResult(BaseModel):
     ok: bool
     latency_ms: int
+    error: str | None = None
+
+
+class CodexStatus(BaseModel):
+    ok: bool
     error: str | None = None
 
 

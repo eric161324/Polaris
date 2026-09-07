@@ -2,7 +2,11 @@
 # 本文件只做 pip 依赖 + 源码拷贝，日常代码更新的重建量控制在分钟级。
 # 先构建基础镜像：make texbase
 ARG TEXBASE_IMAGE=polaris-texbase:latest
-FROM ${TEXBASE_IMAGE}
+FROM node:22-bookworm-slim AS codex-cli
+ARG CODEX_VERSION=0.153.4
+RUN npm install --global @openai/codex@${CODEX_VERSION}
+
+FROM ${TEXBASE_IMAGE} AS api-base
 
 WORKDIR /srv/backend
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
@@ -18,3 +22,12 @@ RUN pip install ${PIP_INDEX_URL:+-i $PIP_INDEX_URL} -e .
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Opt in with build.target=codex; normal images keep their existing dependency set.
+FROM api-base AS codex
+COPY --from=codex-cli /usr/local/bin/node /usr/local/bin/node
+COPY --from=codex-cli /usr/local/lib/node_modules/@openai /opt/codex/@openai
+RUN ln -s /opt/codex/@openai/codex/bin/codex.js /usr/local/bin/codex
+ENV CODEX_HOME=/srv/codex POLARIS_CODEX_HOME=/srv/codex
+
+FROM api-base AS standard

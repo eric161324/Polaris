@@ -14,6 +14,7 @@ from app.schemas.llm_admin import (
     CallLogPage,
     CallLogRow,
     CallLogSettings,
+    CodexStatus,
     ProviderCreate,
     ProviderRead,
     ProviderUpdate,
@@ -76,7 +77,10 @@ async def update_provider(
     session: AsyncSession = Depends(get_session),
 ) -> ProviderRead:
     provider = await _get_provider_or_404(session, provider_id)
-    provider = await llm_admin_service.update_provider(session, provider, data)
+    try:
+        provider = await llm_admin_service.update_provider(session, provider, data)
+    except llm_admin_service.InvalidRouteError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     return _provider_read(provider)
 
 
@@ -118,6 +122,13 @@ async def test_model(
         provider, data.model, data.capability
     )
     return TestModelResult(ok=ok, latency_ms=latency_ms, error=error)
+
+
+@router.get("/codex/status", response_model=CodexStatus)
+async def codex_status() -> CodexStatus:
+    from app.core.llm.codex_cli import CodexCLIProvider
+
+    return CodexStatus(**await CodexCLIProvider().login_status())
 
 
 @router.get("/usage", response_model=list[UsageRow])

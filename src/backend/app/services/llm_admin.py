@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.llm import call_log
 from app.core.llm.anthropic import AnthropicProvider
 from app.core.llm.base import LLMProvider, Message
+from app.core.llm.codex_cli import CodexCLIProvider
 from app.core.llm.fake import FakeProvider
 from app.core.llm.openai_compat import OpenAICompatProvider
 from app.core.llm.router import STAGES, get_llm_router
@@ -92,9 +93,11 @@ async def create_provider(session: AsyncSession, data: ProviderCreate) -> LLMPro
     provider = LLMProviderConfig(
         name=data.name,
         kind=data.kind,
-        base_url=data.base_url,
-        user_agent=_normalize_user_agent(data.user_agent),
-        api_key_encrypted=encrypt_secret(data.api_key) if data.api_key else None,
+        base_url=data.base_url if data.kind != "codex_cli" else None,
+        user_agent=_normalize_user_agent(data.user_agent) if data.kind != "codex_cli" else None,
+        api_key_encrypted=(
+            encrypt_secret(data.api_key) if data.api_key and data.kind != "codex_cli" else None
+        ),
         enabled=data.enabled,
         models=data.models,
     )
@@ -111,17 +114,30 @@ async def update_provider(
     if data.name is not None:
         provider.name = data.name
     if data.kind is not None:
+        if data.kind == "codex_cli":
+            capability_route = await session.scalar(
+                select(ModelRoute.id).where(
+                    ModelRoute.provider_id == provider.id,
+                    ModelRoute.stage.in_(("embedding", "rerank")),
+                ).limit(1)
+            )
+            if capability_route is not None:
+                raise InvalidRouteError("Codex 不支持向量嵌入或重排，请先移除相关路由。")
         provider.kind = data.kind
     if data.base_url is not None:
         provider.base_url = data.base_url
     if data.user_agent is not None:
         provider.user_agent = _normalize_user_agent(data.user_agent)
-    if data.api_key:  # 空字符串/None = 不变
+    if data.api_key and provider.kind != "codex_cli":  # 空字符串/None = 不变
         provider.api_key_encrypted = encrypt_secret(data.api_key)
     if data.enabled is not None:
         provider.enabled = data.enabled
     if data.models is not None:  # 整体替换；清空传 []
         provider.models = data.models
+    if provider.kind == "codex_cli":
+        provider.base_url = None
+        provider.user_agent = None
+        provider.api_key_encrypted = None
     await session.commit()
     await session.refresh(provider)
     get_llm_router().invalidate_cache()
@@ -154,6 +170,8 @@ async def replace_routes(session: AsyncSession, items: Sequence[RouteItem]) -> S
         provider = await session.get(LLMProviderConfig, item.provider_id)
         if provider is None or provider.owner_id is not None:
             raise InvalidRouteError(f"provider not found: {item.provider_id}")
+        if provider.kind == "codex_cli" and item.stage in ("embedding", "rerank"):
+            raise InvalidRouteError("Codex 不支持向量嵌入或重排，请为该环节配置 API 提供商。")
     await session.execute(delete(ModelRoute).where(ModelRoute.owner_id.is_(None)))
     for item in items:
         session.add(
@@ -189,7 +207,11 @@ def _build_provider(provider: LLMProviderConfig) -> LLMProvider:
             base_url=provider.base_url,
             user_agent=provider.user_agent,
         )
-    return FakeProvider()
+    if provider.kind == "codex_cli":
+        return CodexCLIProvider()
+    if provider.kind == "fake":
+        return FakeProvider()
+    raise ValueError(f"unknown LLM provider kind: {provider.kind}")
 
 
 async def probe_model(
@@ -202,7 +224,12 @@ async def probe_model(
     started = time.monotonic()
     ok, error = False, None
     try:
-        async with asyncio.timeout(_TEST_TIMEOUT_S):
+        timeout = (
+            llm.timeout + llm.queue_timeout
+            if isinstance(llm, CodexCLIProvider)
+            else _TEST_TIMEOUT_S
+        )
+        async with asyncio.timeout(timeout):
             if capability == "embedding":
                 await llm.embed(["ping"], model=model)
             elif capability == "rerank":
@@ -212,7 +239,7 @@ async def probe_model(
                 await llm.complete(messages, model=model, max_tokens=8)
         ok = True
     except TimeoutError:
-        error = f"timeout after {_TEST_TIMEOUT_S:.0f}s"
+        error = f"timeout after {timeout:.0f}s"
     except Exception as e:  # noqa: BLE001 — 探测失败原因原样返回
         error = f"{type(e).__name__}: {e}"
     latency_ms = max(1, int((time.monotonic() - started) * 1000))

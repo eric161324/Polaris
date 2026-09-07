@@ -47,7 +47,7 @@ import { AdminSpeechSettings, PersonalSpeechSettings } from './SpeechSettings';
    （AdminSettingsPage），但标签页组件仍住在本文件里 export 出去复用。
    ============================================================ */
 
-const KINDS: LlmProviderKind[] = ['openai_compat', 'anthropic'];
+const KINDS: LlmProviderKind[] = ['openai_compat', 'anthropic', 'codex_cli'];
 
 // ---------------- 个人 ----------------
 
@@ -899,12 +899,28 @@ function toInput(d: ProviderDraft): LlmProviderInput {
   return {
     name: d.name.trim(),
     kind: d.kind,
-    base_url: d.base_url.trim() || undefined,
+    base_url: d.kind === 'codex_cli' ? '' : d.base_url.trim() || undefined,
     user_agent: d.kind === 'anthropic' ? d.user_agent.trim() : '',
-    api_key: d.api_key, // 空字符串 = 不变（PATCH）；POST 时后端忽略空 key
+    api_key: d.kind === 'codex_cli' ? '' : d.api_key, // 空字符串 = 不变（PATCH）；POST 时后端忽略空 key
     enabled: d.enabled,
     models: parseModels(d.models), // 整体替换（清空 = []）
   };
+}
+
+function CodexConnectionStatus() {
+  const status = useQuery({ queryKey: ['llm', 'codex-status'], queryFn: () => api.getCodexStatus(), enabled: false, retry: false });
+  return (
+    <div className="card card-pad" style={{ marginBottom: 12 }}>
+      <p>{tr('使用本机 Codex 的 ChatGPT 订阅登录，无需 LLM API Key。回答完成后一次显示，工具由 Polaris 执行。', 'Uses a dedicated local Codex ChatGPT login; no LLM API key. Replies appear when complete; Polaris executes tools.')}</p>
+      <p className="muted">{tr('不支持嵌入或重排；temperature 不生效，输出 token 上限仅作为长度提示。', 'Embeddings and reranking need separate APIs. Temperature is ignored; output token limits are soft targets.')}</p>
+      <button type="button" className="btn btn-soft sm" disabled={status.isFetching} onClick={() => void status.refetch()}>
+        {status.isFetching ? tr('检查中…', 'Checking…') : tr('检查订阅登录', 'Check subscription login')}
+      </button>
+      {status.data && <p role="status">{status.data.ok ? tr('已通过 ChatGPT 登录。保存后可测试具体模型。', 'Signed in with ChatGPT. Save to test a model.') : status.data.error}</p>}
+      {status.error && <p role="alert">{String(status.error)}</p>}
+      <p className="muted">{tr('未登录时，在部署目录运行 docker/codex-compose.sh run --rm --no-deps api codex login --device-auth，按终端提示完成登录。', 'To sign in, run docker/codex-compose.sh run --rm --no-deps api codex login --device-auth from the deployment directory and follow the terminal instructions.')}</p>
+    </div>
+  );
 }
 
 function ProviderForm({ draft, setDraft, isNew }: {
@@ -922,14 +938,14 @@ function ProviderForm({ draft, setDraft, isNew }: {
         <FormField label={tr('类型', 'Kind')} style={{ width: 180 }}>
           <SelectMenu
             value={draft.kind}
-            options={KINDS.map((k) => ({ value: k, label: k }))}
-            onChange={(v) => setDraft({ ...draft, kind: v as LlmProviderKind })}
+            options={KINDS.map((k) => ({ value: k, label: k === 'codex_cli' ? tr('Codex 订阅', 'Codex subscription') : k }))}
+            onChange={(v) => setDraft({ ...draft, kind: v as LlmProviderKind, ...(v === 'codex_cli' ? { api_key: '', base_url: '', user_agent: '', models: draft.models || 'gpt-6-astra' } : {}) })}
           />
         </FormField>
-        <FormField label="Base URL" style={{ flex: 1 }}>
+        {draft.kind !== 'codex_cli' && <FormField label="Base URL" style={{ flex: 1 }}>
           <input className="input mono" value={draft.base_url} onChange={(e) => setDraft({ ...draft, base_url: e.target.value })}
             placeholder="https://api.example.com/v1" disabled={draft.kind === 'fake'} />
-        </FormField>
+        </FormField>}
       </div>
       {draft.kind === 'anthropic' && (
         <FormField label={tr('User-Agent（可选）', 'User-Agent (optional)')}
@@ -939,12 +955,13 @@ function ProviderForm({ draft, setDraft, isNew }: {
             placeholder="claude-cli/2.1.226 (external, sdk-cli)" />
         </FormField>
       )}
-      <FormField label="API Key"
+      {draft.kind === 'codex_cli' && <CodexConnectionStatus />}
+      {draft.kind !== 'codex_cli' && <FormField label="API Key"
         hint={isNew ? undefined : tr('留空 = 保持不变；后端只写不读，展示为 masked', 'Leave empty to keep unchanged; write-only on the backend, shown masked')}>
         <input className="input mono" type="password" autoComplete="new-password" value={draft.api_key}
           onChange={(e) => setDraft({ ...draft, api_key: e.target.value })}
           placeholder={isNew ? 'sk-…' : tr('••••••（留空不变）', '•••••• (empty = unchanged)')} disabled={draft.kind === 'fake'} />
-      </FormField>
+      </FormField>}
       <FormField label={tr('可用模型', 'Available models')}
         hint={tr('逗号或换行分隔；作为路由表 model 输入框的候选', 'Comma or newline separated; used as suggestions in the routing table model field')}>
         <textarea className="input mono" rows={3} style={{ resize: 'vertical', fontSize: 12 }}
@@ -1624,7 +1641,7 @@ function RoutesSection() {
                       value={shown.provider_id}
                       options={[
                         { value: '', label: tr('（未配置）', '(not set)') },
-                        ...providers.map((p) => ({ value: p.id, label: p.name })),
+                        ...providers.filter((p) => !capability || p.kind !== 'codex_cli').map((p) => ({ value: p.id, label: p.name })),
                       ]}
                       onChange={(v) => setRow(stage, { provider_id: v, model: '' })}
                     />

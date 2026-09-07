@@ -30,6 +30,7 @@ from app.core.llm.base import (
     StreamEvent,
     TextDelta,
 )
+from app.core.llm.codex_cli import CodexCLIProvider
 from app.core.llm.fake import FakeProvider, estimate_tokens
 from app.core.llm.openai_compat import OpenAICompatProvider
 from app.core.security import decrypt_secret
@@ -104,7 +105,7 @@ _CAPABILITY_STAGES = frozenset({"embedding", "rerank"})
 
 @dataclass(slots=True, frozen=True)
 class ResolvedRoute:
-    provider_kind: str  # openai_compat | anthropic | fake
+    provider_kind: str  # openai_compat | anthropic | codex_cli | fake
     base_url: str | None
     api_key: str
     model: str
@@ -315,6 +316,8 @@ class LLMRouter:
                     user_agent=route.user_agent,
                     timeout=timeout,
                 )
+            elif route.provider_kind == "codex_cli":
+                self._providers[key] = CodexCLIProvider()
             elif route.provider_kind == "fake":
                 self._providers[key] = FakeProvider()
             else:

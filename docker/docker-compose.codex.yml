@@ -1,0 +1,45 @@
+# Personal subscription deployment. Compose >= 2.24.4 is required for !override.
+name: polaris-codex
+
+services:
+  api:
+    init: true
+    image: polaris-local/api:codex-subscription
+    build:
+      target: codex
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.153.4}
+    environment:
+      POLARIS_ENV: prod
+      POLARIS_CODEX_HOME: /srv/codex
+      CODEX_HOME: /srv/codex
+      POLARIS_CHAT_AGENT_ENABLED: "true"
+    ports: !override
+      - "127.0.0.1:${POLARIS_API_PORT:-8000}:8000"
+    volumes:
+      - codex-auth:/srv/codex
+
+  worker:
+    init: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    image: polaris-local/worker:codex-subscription
+    build:
+      target: codex
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.153.4}
+    environment:
+      POLARIS_ENV: prod
+      POLARIS_CODEX_HOME: /srv/codex
+      CODEX_HOME: /srv/codex
+      POLARIS_CHAT_AGENT_ENABLED: "true"
+    volumes:
+      - codex-auth:/srv/codex
+
+  frontend:
+    image: polaris-local/frontend:codex-subscription
+    ports: !override
+      - "127.0.0.1:${POLARIS_FRONTEND_PORT:-8080}:80"
+
+volumes:
+  codex-auth:
